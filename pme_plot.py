@@ -15,7 +15,7 @@ if __name__ == "__main__":
     m = 2.0
     Gamma = 1.0
     X_domain_max = 10.0
-    T_sim_max = 1.0
+    T_sim_max = 0.5
     t0 = 0.1                         # Barenblatt 初始化用的起始時間
     center = X_domain_max / 2.0       # 置中，避免一開始貼邊界
 
@@ -23,8 +23,8 @@ if __name__ == "__main__":
         'N_CELLS': 401,
         'NT_frames': 121,
         'T_MAX': T_sim_max,
-        'CFL_adv': 0.8,
-        'CFL_diff': 0.45,
+        'CFL_adv': 0.5,
+        'CFL_diff': 0.3,
     }
     RHO_FLOOR_const = 1e-9
 

@@ -1,6 +1,61 @@
 # fvm.py
 import numpy as np
 
+def gradient_fd(q, dx):
+        dq = np.zeros_like(q)
+        dq[1:-1] = (q[2:] - q[:-2]) / (2.0 * dx)
+        dq[0] = (q[1] - q[0]) / dx
+        dq[-1] = (q[-1] - q[-2]) / dx
+        return dq
+
+def build_face_velocity_noflux(u):
+    """將 cell-centered u 轉 face，並在兩端強制 0（零通量）。"""
+    N = len(u)
+    u_face = np.zeros(N + 1)
+    u_face[1:-1] = 0.5 * (u[:-1] + u[1:])
+    # 關鍵：邊界設為 0 → ρu 的邊界通量為 0
+    u_face[0] = 0.0
+    u_face[-1] = 0.0
+    return u_face
+
+def upwind_flux_dirichlet(q, u_face, q_left_bc, q_right_bc):
+    N = len(q)
+    F = np.zeros(N + 1)
+    # 左邊界面（u_face[0] 已為 0，這裡仍寫完整邏輯）
+    if u_face[0] >= 0.0:
+        F[0] = u_face[0] * q_left_bc
+    else:
+        F[0] = u_face[0] * q[0]
+    # 內部面
+    qL, qR, uf_int = q[:-1], q[1:], u_face[1:-1]
+    F[1:-1] = np.where(uf_int >= 0.0, uf_int * qL, uf_int * qR)
+    # 右邊界面
+    if u_face[-1] >= 0.0:
+        F[-1] = u_face[-1] * q[-1]
+    else:
+        F[-1] = u_face[-1] * q_right_bc
+    return F
+
+def update_fvm_dirichlet(q, u, dt, dx, source_term=None, q_left_bc=None, q_right_bc=None):
+    # 如果未提供，採用「零梯度」型 Dirichlet：使用當前邊界 cell 值
+    if q_left_bc is None:
+        q_left_bc = q[0]
+    if q_right_bc is None:
+        q_right_bc = q[-1]
+    u_face = build_face_velocity_noflux(u)
+    F = upwind_flux_dirichlet(q, u_face, q_left_bc, q_right_bc)
+    q_new = q - (dt / dx) * (F[1:] - F[:-1])
+    if source_term is not None:
+        q_new = q_new + dt * source_term
+    return q_new
+
+
+
+
+
+
+
+
 def gradient_fd_neumann(q, dx):
     """
     一維中央差分 + Neumann(零梯度)鬼點
@@ -118,10 +173,11 @@ def run_pme_neumann_scheme(common_params, m, Gamma, X_MAX, RHO_FLOOR, t0=1e-3, c
         dt = min(dt_adv, dt_diff, T_MAX - t)
 
         # I_t + (u I)_x = 0
-        I_next = update_fvm_neumann(I, u, dt, dx)
+        I_next = update_fvm_dirichlet(I, u, dt, dx, q_left_bc=I[0], q_right_bc=I[-1])
+        #I_next = update_fvm_neumann(I, u, dt, dx)
         I_next = np.maximum(I_next, 0.0)
 
-        # Y_t + (u Y)_x = Y u_x
+        # Y_t + u Y_x = Y u_x
         du_dx = gradient_fd_neumann(u, dx)
         Y_next = update_fvm_neumann(Y, u, dt, dx, source_term=Y * du_dx)
 
